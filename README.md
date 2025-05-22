@@ -11,24 +11,24 @@ This guide will help you set up a cron-based system to monitor Bitcoin and Ether
 ## Step 1: Create a Project Directory
 
 ```bash
-mkdir -p ~/crypto_alert
-cd ~/crypto_alert
+mkdir -p ~/app/crypto_alert
+cd ~/app/crypto_alert
 ```
 
-## Step 2: Set Up a Python Virtual Environment (Optional but Recommended)
+## Step 2: Set Up a Python Virtual Environment
 
 ```bash
-# Install virtualenv if you don't have it
-pip install virtualenv
+# Create a virtual environment
+python3 -m venv venv
 
-# Create and activate a virtual environment
-virtualenv venv
+# Activate the virtual environment
 source venv/bin/activate
 ```
 
 ## Step 3: Install Required Dependencies
 
 ```bash
+# Make sure you're in the activated virtual environment
 pip install requests python-dotenv
 ```
 
@@ -55,46 +55,81 @@ Replace `your_discord_webhook_url_here` with the webhook URL you copied from Dis
 
 Copy the entire Python script into a file named `crypto_alert.py` in your project directory.
 
-## Step 7: Make the Script Executable
+## Step 7: Create the Wrapper Script
+
+Create a file named `run_crypto_alert.sh` and copy the wrapper script into it. This script handles the virtual environment activation for cron.
+
+## Step 8: Test the Scripts Manually
 
 ```bash
-chmod +x crypto_alert.py
-```
-
-## Step 8: Test the Script Manually
-
-```bash
+# Test the Python script directly (with venv activated)
+source venv/bin/activate
 python crypto_alert.py
+
+# Test the wrapper script (from any environment)
+./run_crypto_alert.sh
 ```
 
 You should see log outputs, and if any cryptocurrency has already dropped below the thresholds, you'll receive a Discord notification.
 
 ## Step 9: Set Up the Cron Job
 
-There are two ways to set up the cron job:
+### Option 1: Using the automated setup script (Recommended)
 
-### Option 1: Using the setup script
-
-1. Create a file named `setup_cron.sh` and copy the setup script into it
+1. Create a file named `setup_cron.sh` and copy the updated cron setup script into it
 2. Make it executable: `chmod +x setup_cron.sh`
 3. Run it: `./setup_cron.sh`
 
+The script will:
+- Check if your virtual environment exists
+- Check if the Python script exists
+- Make all scripts executable
+- Set up the cron job to use the wrapper script
+- Handle existing cron entries gracefully
+
 ### Option 2: Setting up manually
 
-1. Open your crontab: `crontab -e`
-2. Add the following line to run every 15 minutes:
+1. First make the wrapper script executable:
+   ```bash
+   chmod +x ~/crypto_alert/run_crypto_alert.sh
    ```
-   */15 * * * * cd ~/crypto_alert && /usr/bin/python3 ~/crypto_alert/crypto_alert.py >> ~/crypto_alert/cron_execution.log 2>&1
-   ```
-3. Save and exit the editor
 
-## Step 10: Verify the Cron Job
+2. Open your crontab: `crontab -e`
+
+3. Add the following line to run every 15 minutes:
+   ```
+   */15 * * * * ~/crypto_alert/run_crypto_alert.sh >> ~/crypto_alert/cron_execution.log 2>&1
+   ```
+
+4. Save and exit the editor
+
+## Step 10: Verify the Setup
 
 ```bash
+# Check your crontab
 crontab -l
+
+# Test the wrapper script manually
+~/crypto_alert/run_crypto_alert.sh
+
+# Monitor the logs
+tail -f ~/crypto_alert/crypto_alert.log
 ```
 
-You should see your new cron entry listed.
+## Project Structure
+
+After setup, your project directory should look like this:
+
+```
+~/crypto_alert/
+├── venv/                    # Virtual environment
+├── crypto_alert.py         # Main Python script
+├── run_crypto_alert.sh     # Wrapper script for cron
+├── setup_cron.sh          # Setup script
+├── .env                   # Environment variables
+├── crypto_alert.log       # Application logs
+└── cron_execution.log     # Cron execution logs
+```
 
 ## Customizing the Alert Thresholds
 
