@@ -1,0 +1,60 @@
+{
+  "coins": [
+    {
+      "id": "bitcoin",
+      "name": "Bitcoin",
+      "symbol": "BTC",
+      "ath_thresholds": [30, 40, 50, 60, 70],
+      "price_alerts": [80000, 70000, 60000, 50000, 40000]
+    },
+    {
+      "id": "ethereum",
+      "name": "Ethereum",
+      "symbol": "ETH",
+      "ath_thresholds": [30, 40, 50, 60, 70],
+      "price_alerts": [2500, 2000, 1500]
+    },
+    {
+      "id": "ripple",
+      "name": "XRP",
+      "symbol": "XRP",
+      "ath_thresholds": [30, 40, 50, 60, 70],
+      "price_alerts": [1, 0.8, 0.6, 0.5]
+    },
+    {
+      "id": "solana",
+      "name": "Solana",
+      "symbol": "SOL",
+      "ath_thresholds": [30, 40, 50, 60, 70],
+      "price_alerts": [125, 115, 105, 95, 85]
+    },
+    {
+      "id": "dogecoin",
+      "name": "Dogecoin",
+      "symbol": "DOGE",
+      "ath_thresholds": [30, 40, 50, 60, 70],
+      "price_alerts": [0.17, 0.15, 0.13, 0.11]
+    },
+    {
+      "id": "tron",
+      "name": "TRON",
+      "symbol": "TRX",
+      "ath_thresholds": [30, 40, 50, 60, 70],
+      "price_alerts": [0.2, 0.18, 0.16, 0.14]
+    },
+    {
+      "id": "cardano",
+      "name": "Cardano",
+      "symbol": "ADA",
+      "ath_thresholds": [30, 40, 50, 60, 70],
+      "price_alerts": [0.5, 0.4, 0.3]
+    },
+    {
+      "id": "monero",
+      "name": "Monero",
+      "symbol": "XMR",
+      "ath_thresholds": [30, 40, 50, 60, 70],
+      "price_alerts": [200, 175, 150]
+    }
+  ]
+}

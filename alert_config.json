@@ -1,0 +1,6 @@
+{
+  "reset_alerts_daily": true,
+  "check_interval_minutes": 15,
+  "max_alerts_per_run": 20,
+  "alert_tracking_file": "sent_alerts.json"
+}
