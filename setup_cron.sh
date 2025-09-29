@@ -2,7 +2,7 @@
 # This script sets up the cron job for the crypto price alert system with virtual environment support
 
 # Define the project directory - update this to your actual path
-PROJECT_DIR="$HOME/crypto_alert"
+PROJECT_DIR="$HOME/app/crypto_alert"
 WRAPPER_SCRIPT="$PROJECT_DIR/run_crypto_alert.sh"
 PYTHON_SCRIPT="$PROJECT_DIR/crypto_alert.py"
 LOG_PATH="$PROJECT_DIR/cron_execution.log"

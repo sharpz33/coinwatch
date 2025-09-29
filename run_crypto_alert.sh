@@ -4,7 +4,7 @@
 # This script activates the virtual environment and runs the Python script
 
 # Set the project directory - update this to your actual path
-PROJECT_DIR="$HOME/app/finance_alert"
+PROJECT_DIR="$HOME/app/crypto_alert"
 
 # Change to the project directory
 cd "$PROJECT_DIR" || {
