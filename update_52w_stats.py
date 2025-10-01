@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 # Configuration
 COINS_CONFIG_FILE = "coins_config.json"
 STATS_FILE = "52w_stats.json"
-RATE_LIMIT_SLEEP = 1.5  # seconds between API calls
+RATE_LIMIT_SLEEP = 3.0  # seconds between API calls (increased for free tier limits)
 
 
 def load_coins_config():
@@ -57,9 +57,9 @@ def save_52w_stats(stats_data, filename=STATS_FILE):
         logger.error(f"Error saving stats: {e}")
 
 
-def fetch_52w_high_low(crypto_id):
+def fetch_52w_high_low(crypto_id, max_retries=3):
     """
-    Fetch 52-week high and low for a cryptocurrency
+    Fetch 52-week high and low for a cryptocurrency with retry logic
     Returns dict with high_52w and low_52w, or None on error
     """
     url = f"https://api.coingecko.com/api/v3/coins/{crypto_id}/market_chart"
@@ -68,32 +68,45 @@ def fetch_52w_high_low(crypto_id):
         "days": "365"
     }
 
-    try:
-        response = requests.get(url, params=params)
-        response.raise_for_status()
-        data = response.json()
+    for attempt in range(max_retries):
+        try:
+            response = requests.get(url, params=params)
+            response.raise_for_status()
+            data = response.json()
 
-        if "prices" not in data or len(data["prices"]) == 0:
-            logger.warning(f"No price data returned for {crypto_id}")
+            if "prices" not in data or len(data["prices"]) == 0:
+                logger.warning(f"No price data returned for {crypto_id}")
+                return None
+
+            # Extract prices from [timestamp, price] pairs
+            prices = [price[1] for price in data["prices"]]
+
+            result = {
+                "high_52w": max(prices),
+                "low_52w": min(prices)
+            }
+
+            logger.info(f"{crypto_id}: 52w high=${result['high_52w']:,.2f}, low=${result['low_52w']:,.2f}")
+            return result
+
+        except requests.exceptions.HTTPError as e:
+            if e.response.status_code == 429:  # Rate limit
+                retry_wait = (attempt + 1) * 10  # 10s, 20s, 30s
+                logger.warning(f"Rate limit hit for {crypto_id}, waiting {retry_wait}s before retry {attempt + 1}/{max_retries}")
+                time.sleep(retry_wait)
+                continue
+            else:
+                logger.error(f"HTTP error fetching 52w data for {crypto_id}: {str(e)}")
+                return None
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Error fetching 52w data for {crypto_id}: {str(e)}")
+            return None
+        except (KeyError, ValueError, TypeError) as e:
+            logger.error(f"Error parsing 52w data for {crypto_id}: {str(e)}")
             return None
 
-        # Extract prices from [timestamp, price] pairs
-        prices = [price[1] for price in data["prices"]]
-
-        result = {
-            "high_52w": max(prices),
-            "low_52w": min(prices)
-        }
-
-        logger.info(f"{crypto_id}: 52w high=${result['high_52w']:,.2f}, low=${result['low_52w']:,.2f}")
-        return result
-
-    except requests.exceptions.RequestException as e:
-        logger.error(f"Error fetching 52w data for {crypto_id}: {str(e)}")
-        return None
-    except (KeyError, ValueError, TypeError) as e:
-        logger.error(f"Error parsing 52w data for {crypto_id}: {str(e)}")
-        return None
+    logger.error(f"Failed to fetch {crypto_id} after {max_retries} retries")
+    return None
 
 
 def is_stats_stale(last_updated_str, max_age_days=7):
