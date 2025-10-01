@@ -113,9 +113,9 @@ def get_current_prices(coin_ids):
         logger.error(f"Error fetching current prices: {str(e)}")
         return None
 
-def get_ath_price(crypto_id):
+def get_ath_price(crypto_id, max_retries=3):
     """
-    Fetch all-time high price for a specific cryptocurrency
+    Fetch all-time high price for a specific cryptocurrency with retry logic
     """
     url = f"https://api.coingecko.com/api/v3/coins/{crypto_id}"
     params = {
@@ -125,14 +125,27 @@ def get_ath_price(crypto_id):
         "community_data": "false",
         "developer_data": "false"
     }
-    
-    try:
-        response = requests.get(url, params=params)
-        response.raise_for_status()
-        return response.json()
-    except requests.exceptions.RequestException as e:
-        logger.error(f"Error fetching ATH for {crypto_id}: {str(e)}")
-        return None
+
+    for attempt in range(max_retries):
+        try:
+            response = requests.get(url, params=params)
+            response.raise_for_status()
+            return response.json()
+        except requests.exceptions.HTTPError as e:
+            if e.response.status_code == 429:  # Rate limit
+                retry_wait = (attempt + 1) * 5  # 5s, 10s, 15s
+                logger.warning(f"Rate limit hit for {crypto_id} ATH, waiting {retry_wait}s before retry {attempt + 1}/{max_retries}")
+                time.sleep(retry_wait)
+                continue
+            else:
+                logger.error(f"HTTP error fetching ATH for {crypto_id}: {str(e)}")
+                return None
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Error fetching ATH for {crypto_id}: {str(e)}")
+            return None
+
+    logger.error(f"Failed to fetch ATH for {crypto_id} after {max_retries} retries")
+    return None
 
 def check_alerts():
     """

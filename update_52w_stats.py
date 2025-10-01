@@ -158,6 +158,7 @@ def update_all_52w_stats():
     # Fetch 52w data for each coin
     coin_ids = [coin['id'] for coin in coins_config['coins']]
     total_coins = len(coin_ids)
+    failed_coins = []
 
     for idx, coin_id in enumerate(coin_ids, 1):
         logger.info(f"Updating {coin_id} ({idx}/{total_coins})")
@@ -171,12 +172,36 @@ def update_all_52w_stats():
                 "updated_at": str(date.today())
             }
         else:
-            logger.warning(f"Failed to fetch 52w data for {coin_id}, skipping")
+            logger.warning(f"Failed to fetch 52w data for {coin_id}, will retry later")
+            failed_coins.append(coin_id)
 
         # Rate limiting - don't sleep after last request
         if idx < total_coins:
             logger.debug(f"Sleeping {RATE_LIMIT_SLEEP}s for rate limiting")
             time.sleep(RATE_LIMIT_SLEEP)
+
+    # Retry failed coins after a longer wait
+    if failed_coins:
+        logger.info(f"Retrying {len(failed_coins)} failed coins after 60s cooldown")
+        time.sleep(60)
+
+        for idx, coin_id in enumerate(failed_coins, 1):
+            logger.info(f"Retry: Updating {coin_id} ({idx}/{len(failed_coins)})")
+            result = fetch_52w_high_low(coin_id, max_retries=2)
+
+            if result:
+                stats_data["coins"][coin_id] = {
+                    "high_52w": result["high_52w"],
+                    "low_52w": result["low_52w"],
+                    "updated_at": str(date.today())
+                }
+                logger.info(f"Successfully fetched {coin_id} on retry")
+            else:
+                logger.error(f"Failed to fetch {coin_id} even after retry")
+
+            # Rate limiting between retries
+            if idx < len(failed_coins):
+                time.sleep(RATE_LIMIT_SLEEP)
 
     # Save results
     if stats_data["coins"]:
