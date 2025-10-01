@@ -1,186 +1,105 @@
-# Cryptocurrency ATH Drop Alert System - Installation Guide
+# 🚨 Crypto Alert Bot
 
-This guide will help you set up a cron-based system to monitor Bitcoin and Ethereum price drops from their All-Time Highs (ATH) and send alerts to Discord when specific thresholds are crossed.
+Cryptocurrency price monitoring system that sends intelligent alerts to Discord.
 
-## Prerequisites
+![Python](https://img.shields.io/badge/python-3.8+-blue.svg)
+![License](https://img.shields.io/badge/license-MIT-green.svg)
+![Tests](https://img.shields.io/badge/tests-39%20passing-brightgreen.svg)
 
-- Linux/Unix-based system (for cron)
-- Python 3.6+
-- Discord server with webhook permissions
+## Features
 
-## Step 1: Create a Project Directory
+- **ATH Drop Alerts** - Get notified when crypto drops X% from all-time high
+- **Price Alerts** - Set custom price thresholds
+- **Market Insights** - 24h/7d changes, market cap rank, 52w high/low distance
+- **Smart Retry Logic** - Handles API rate limits automatically
+- **Multi-Coin Support** - Monitor 12+ cryptocurrencies
+- **Fully Tested** - 39 tests ensuring reliability
+
+## Quick Start
 
 ```bash
-mkdir -p ~/app/crypto_alert
-cd ~/app/crypto_alert
-```
-
-## Step 2: Set Up a Python Virtual Environment
-
-```bash
-# Create a virtual environment
+# Clone and setup
+git clone https://github.com/yourusername/crypto-alert.git
+cd crypto-alert
 python3 -m venv venv
-
-# Activate the virtual environment
 source venv/bin/activate
-```
+pip install -r requirements.txt
 
-## Step 3: Install Required Dependencies
+# Configure
+cp .env.example .env
+# Edit .env with your Discord webhook URL
 
-```bash
-# Make sure you're in the activated virtual environment
-pip install requests python-dotenv
-```
-
-## Step 4: Create the Discord Webhook
-
-1. Open Discord and navigate to your server
-2. Right-click on your server or desired channel → Server Settings → Integrations
-3. Click "Webhooks" → "New Webhook"
-4. Name your webhook (e.g., "Crypto Alert Bot") and choose an avatar if desired
-5. Select the channel where you want to receive alerts
-6. Click "Copy Webhook URL" - you'll need this in the next step
-
-## Step 5: Create the .env File
-
-Create a file named `.env` in your project directory:
-
-```bash
-echo "DISCORD_WEBHOOK_URL=your_discord_webhook_url_here" > .env
-```
-
-Replace `your_discord_webhook_url_here` with the webhook URL you copied from Discord.
-
-## Step 6: Add the Python Script
-
-Copy the entire Python script into a file named `crypto_alert.py` in your project directory.
-
-## Step 7: Create the Wrapper Script
-
-Create a file named `run_crypto_alert.sh` and copy the wrapper script into it. This script handles the virtual environment activation for cron.
-
-## Step 8: Test the Scripts Manually
-
-```bash
-# Test the Python script directly (with venv activated)
-source venv/bin/activate
+# Initialize and run
+python update_52w_stats.py
 python crypto_alert.py
 
-# Test the wrapper script (from any environment)
-./run_crypto_alert.sh
+# Setup automated scheduling (cron)
+./setup_cron.sh
 ```
 
-You should see log outputs, and if any cryptocurrency has already dropped below the thresholds, you'll receive a Discord notification.
+## Configuration
 
-## Step 9: Set Up the Cron Job
+**coins_config.json** - Add/edit coins:
+```json
+{
+  "id": "bitcoin",
+  "name": "Bitcoin",
+  "symbol": "BTC",
+  "ath_thresholds": [30, 40, 50, 60, 70],
+  "price_alerts": [80000, 70000, 60000]
+}
+```
 
-### Option 1: Using the automated setup script (Recommended)
+**alert_config.json** - Customize alerts:
+```json
+{
+  "reset_alerts_daily": true,
+  "check_interval_minutes": 360
+}
+```
 
-1. Create a file named `setup_cron.sh` and copy the updated cron setup script into it
-2. Make it executable: `chmod +x setup_cron.sh`
-3. Run it: `./setup_cron.sh`
+## How It Works
 
-The script will:
-- Check if your virtual environment exists
-- Check if the Python script exists
-- Make all scripts executable
-- Set up the cron job to use the wrapper script
-- Handle existing cron entries gracefully
+1. **crypto_alert.py** - Checks prices every 6 hours, sends Discord alerts
+2. **update_52w_stats.py** - Updates 52-week stats weekly (Sunday 3 AM)
+3. **setup_cron.sh** - Configures automated scheduling
 
-### Option 2: Setting up manually
-
-1. First make the wrapper script executable:
-   ```bash
-   chmod +x ~/crypto_alert/run_crypto_alert.sh
-   ```
-
-2. Open your crontab: `crontab -e`
-
-3. Add the following line to run every 15 minutes:
-   ```
-   */15 * * * * ~/crypto_alert/run_crypto_alert.sh >> ~/crypto_alert/cron_execution.log 2>&1
-   ```
-
-4. Save and exit the editor
-
-## Step 10: Verify the Setup
+## Testing
 
 ```bash
-# Check your crontab
-crontab -l
-
-# Test the wrapper script manually
-~/crypto_alert/run_crypto_alert.sh
-
-# Monitor the logs
-tail -f ~/crypto_alert/crypto_alert.log
+pytest                          # Run all tests
+pytest test_crypto_alert.py -v # Test main script
 ```
 
-## Project Structure
-
-After setup, your project directory should look like this:
-
-```
-~/crypto_alert/
-├── venv/                    # Virtual environment
-├── crypto_alert.py         # Main Python script
-├── run_crypto_alert.sh     # Wrapper script for cron
-├── setup_cron.sh          # Setup script
-├── .env                   # Environment variables
-├── crypto_alert.log       # Application logs
-└── cron_execution.log     # Cron execution logs
-```
-
-## Customizing the Alert Thresholds
-
-To customize which price drop percentages trigger alerts, edit the `THRESHOLDS` list in the `crypto_alert.py` file:
-
-```python
-# Default is 30%, 40%, 50%, 60%, 70%
-THRESHOLDS = [30, 40, 50, 60, 70]  # Modify these values as needed
-```
-
-## Adding More Cryptocurrencies
-
-To monitor additional cryptocurrencies, edit the `CRYPTOCURRENCIES` list in the `crypto_alert.py` file:
-
-```python
-# Default is Bitcoin and Ethereum
-CRYPTOCURRENCIES = ['bitcoin', 'ethereum', 'solana', 'cardano']  # Add more as needed
-```
-
-Make sure to use the ID as it appears in CoinGecko's API (usually the lowercase name with hyphens instead of spaces).
-
-## Monitoring the Logs
-
-You can check the script's logs in two files:
-
-1. `crypto_alert.log` - Contains detailed script execution logs
-2. `cron_execution.log` - Contains cron execution logs
+## Monitoring
 
 ```bash
-tail -f ~/crypto_alert/crypto_alert.log
+tail -f crypto_alert.log     # View alert logs
+tail -f update_52w_stats.log # View update logs
+crontab -l                    # Check cron schedule
 ```
 
 ## Troubleshooting
 
-If you're having issues:
+- **No alerts?** Check Discord webhook in `.env` and alert thresholds
+- **Rate limits?** Script retries automatically, consider less frequent checks
+- **Missing 52w data?** Run `python update_52w_stats.py`
 
-1. **Discord alerts not working**: Double-check your webhook URL in the `.env` file
-2. **Script not running**: Check cron execution logs with `tail -f ~/crypto_alert/cron_execution.log`
-3. **API rate limiting**: The free CoinGecko API has rate limits. If you're getting errors, you might need to reduce frequency or implement rate limiting
-4. **Permission issues**: Make sure your script is executable and that the cron user has access to the directory
+## Contributing
 
-## Notes on CoinGecko API Usage
+1. Fork the repo
+2. Add tests for new features
+3. Ensure tests pass
+4. Submit PR
 
-The free CoinGecko API has rate limits. If you plan to run this script frequently or monitor many cryptocurrencies, consider:
+## License
 
-1. Adding a delay between API calls
-2. Implementing exponential backoff for retries
-3. Using CoinGecko's Pro API if you need higher limits
+MIT License - see [LICENSE](LICENSE)
 
-## Security Notes
+## Acknowledgments
 
-- Your Discord webhook URL should be kept private
-- The `.env` file contains sensitive information, ensure it has appropriate permissions
-- If you're using a shared system, consider using file permissions to restrict access to your script and credential files
+- [CoinGecko API](https://www.coingecko.com/en/api) for price data
+
+---
+
+**Disclaimer**: For informational purposes only. DYOR before investing.
