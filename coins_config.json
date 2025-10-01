@@ -55,6 +55,34 @@
       "symbol": "XMR",
       "ath_thresholds": [50, 60, 70],
       "price_alerts": [200, 175, 150]
+    },
+    {
+      "id": "ondo-finance",
+      "name": "Ondo",
+      "symbol": "ONDO",
+      "ath_thresholds": [50, 60, 70],
+      "price_alerts": [0.9, 0.8, 0.7, 0.6, 0.5]
+    },
+    {
+      "id": "blockstack",
+      "name": "Stacks",
+      "symbol": "STX",
+      "ath_thresholds": [70, 80, 90],
+      "price_alerts": [0.6, 0.5, 0.4]
+    },
+    {
+      "id": "bittensor",
+      "name": "Bittensor",
+      "symbol": "TAO",
+      "ath_thresholds": [50, 60, 70],
+      "price_alerts": [300, 250, 200, 150]
+    },
+    {
+      "id": "clearpool",
+      "name": "Clearpool",
+      "symbol": "CPOOL",
+      "ath_thresholds": [],
+      "price_alerts": [0.12, 0.10, 0.09, 0.08]
     }
   ]
 }
