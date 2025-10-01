@@ -26,6 +26,7 @@ DISCORD_WEBHOOK_URL = os.getenv('DISCORD_WEBHOOK_URL')
 # Configuration files
 COINS_CONFIG_FILE = "coins_config.json"
 ALERT_CONFIG_FILE = "alert_config.json"
+STATS_52W_FILE = "52w_stats.json"
 
 def load_coins_config():
     """Load coins configuration from JSON file"""
@@ -77,6 +78,18 @@ def save_sent_alerts(alert_data, alert_config):
     except Exception as e:
         logger.error(f"Error saving alert tracking: {e}")
 
+def load_52w_stats():
+    """Load 52w stats from JSON file"""
+    try:
+        with open(STATS_52W_FILE, 'r') as f:
+            return json.load(f)
+    except FileNotFoundError:
+        logger.warning(f"52w stats file {STATS_52W_FILE} not found. Run update_52w_stats.py first.")
+        return {"last_updated": None, "coins": {}}
+    except json.JSONDecodeError as e:
+        logger.error(f"Error parsing 52w stats: {e}")
+        return {"last_updated": None, "coins": {}}
+
 def get_current_prices(coin_ids):
     """
     Fetch current prices for specified cryptocurrencies
@@ -88,7 +101,8 @@ def get_current_prices(coin_ids):
         "order": "market_cap_desc",
         "per_page": 100,
         "page": 1,
-        "sparkline": "false"
+        "sparkline": "false",
+        "price_change_percentage": "24h,7d"
     }
     
     try:
@@ -131,8 +145,9 @@ def check_alerts():
     if not coins_config:
         return []
 
-    # Load alert tracking
+    # Load alert tracking and 52w stats
     sent_alerts = load_sent_alerts(alert_config)
+    stats_52w = load_52w_stats()
 
     # Get coin IDs for API call
     coin_ids = [coin['id'] for coin in coins_config['coins']]
@@ -159,6 +174,39 @@ def check_alerts():
         crypto_name = coin_config['name']
         crypto_symbol = coin_config['symbol']
 
+        # Get additional market data from API response
+        price_change_24h = crypto.get('price_change_percentage_24h')
+        price_change_7d = crypto.get('price_change_percentage_7d_in_currency')
+        market_cap_rank = crypto.get('market_cap_rank')
+        total_volume = crypto.get('total_volume')
+        market_cap = crypto.get('market_cap')
+
+        # Get 52w stats if available
+        coin_52w_stats = stats_52w.get('coins', {}).get(crypto_id)
+        high_52w = coin_52w_stats.get('high_52w') if coin_52w_stats else None
+        low_52w = coin_52w_stats.get('low_52w') if coin_52w_stats else None
+
+        # Calculate % from 52w high/low
+        pct_from_52w_high = None
+        pct_from_52w_low = None
+        if high_52w and high_52w > 0:
+            pct_from_52w_high = ((current_price - high_52w) / high_52w) * 100
+        if low_52w and low_52w > 0:
+            pct_from_52w_low = ((current_price - low_52w) / low_52w) * 100
+
+        # Build common market data dict
+        market_data = {
+            "priceChange24h": round(price_change_24h, 2) if price_change_24h else None,
+            "priceChange7d": round(price_change_7d, 2) if price_change_7d else None,
+            "marketCapRank": market_cap_rank,
+            "totalVolume": total_volume,
+            "marketCap": market_cap,
+            "high52w": high_52w,
+            "low52w": low_52w,
+            "pctFrom52wHigh": round(pct_from_52w_high, 2) if pct_from_52w_high else None,
+            "pctFrom52wLow": round(pct_from_52w_low, 2) if pct_from_52w_low else None
+        }
+
         logger.info(f"{crypto_name} ({crypto_symbol}) - Current: ${current_price:.6f}")
 
         # Check ATH alerts
@@ -176,14 +224,16 @@ def check_alerts():
                         drop_percent < (threshold + 10) and
                         alert_key not in sent_alerts['sent_alerts']):
 
-                        alerts.append({
+                        alert = {
                             "type": "ath",
                             "crypto": f"{crypto_name} ({crypto_symbol})",
                             "currentPrice": current_price,
                             "athPrice": ath_price,
                             "dropPercent": round(drop_percent, 2),
                             "threshold": threshold
-                        })
+                        }
+                        alert.update(market_data)
+                        alerts.append(alert)
                         new_sent_alerts[alert_key] = True
 
             # Rate limiting - wait between API calls
@@ -199,14 +249,16 @@ def check_alerts():
                     price_diff = current_price - target_price
                     price_diff_percent = (price_diff / target_price) * 100 if target_price > 0 else 0
 
-                    alerts.append({
+                    alert = {
                         "type": "price",
                         "crypto": f"{crypto_name} ({crypto_symbol})",
                         "currentPrice": current_price,
                         "targetPrice": target_price,
                         "priceDiff": price_diff,
                         "priceDiffPercent": round(price_diff_percent, 2)
-                    })
+                    }
+                    alert.update(market_data)
+                    alerts.append(alert)
                     new_sent_alerts[alert_key] = True
 
     # Save updated alert tracking
@@ -233,11 +285,34 @@ def send_discord_alert(alerts):
     if ath_alerts:
         description_parts.append("## 🚨 ATH Drop Alerts")
         for alert in ath_alerts:
+            # Build market metrics section
+            metrics = []
+            if alert.get('priceChange24h') is not None:
+                emoji = "📈" if alert['priceChange24h'] > 0 else "📉"
+                metrics.append(f"24h: {emoji} {alert['priceChange24h']:+.2f}%")
+            if alert.get('priceChange7d') is not None:
+                emoji = "📈" if alert['priceChange7d'] > 0 else "📉"
+                metrics.append(f"7d: {emoji} {alert['priceChange7d']:+.2f}%")
+            if alert.get('marketCapRank'):
+                metrics.append(f"Rank: #{alert['marketCapRank']}")
+
+            # 52w range info
+            range_info = []
+            if alert.get('pctFrom52wHigh') is not None:
+                range_info.append(f"From 52w high: {alert['pctFrom52wHigh']:+.1f}%")
+            if alert.get('pctFrom52wLow') is not None:
+                range_info.append(f"From 52w low: {alert['pctFrom52wLow']:+.1f}%")
+
+            metrics_text = " • ".join(metrics) if metrics else ""
+            range_text = " • ".join(range_info) if range_info else ""
+
             description_parts.append(
                 f"**{alert['crypto']}** dropped **{alert['dropPercent']}%** from ATH\n"
                 f"├ Current: ${alert['currentPrice']:,.6f}\n"
                 f"├ ATH: ${alert['athPrice']:,.6f}\n"
-                f"└ Threshold: {alert['threshold']}%\n"
+                f"├ Threshold: {alert['threshold']}%\n"
+                + (f"├ {metrics_text}\n" if metrics_text else "")
+                + (f"└ {range_text}\n" if range_text else "└\n")
             )
 
     if price_alerts:
@@ -245,11 +320,34 @@ def send_discord_alert(alerts):
             description_parts.append("")  # Empty line separator
         description_parts.append("## 💰 Price Alerts")
         for alert in price_alerts:
+            # Build market metrics section
+            metrics = []
+            if alert.get('priceChange24h') is not None:
+                emoji = "📈" if alert['priceChange24h'] > 0 else "📉"
+                metrics.append(f"24h: {emoji} {alert['priceChange24h']:+.2f}%")
+            if alert.get('priceChange7d') is not None:
+                emoji = "📈" if alert['priceChange7d'] > 0 else "📉"
+                metrics.append(f"7d: {emoji} {alert['priceChange7d']:+.2f}%")
+            if alert.get('marketCapRank'):
+                metrics.append(f"Rank: #{alert['marketCapRank']}")
+
+            # 52w range info
+            range_info = []
+            if alert.get('pctFrom52wHigh') is not None:
+                range_info.append(f"From 52w high: {alert['pctFrom52wHigh']:+.1f}%")
+            if alert.get('pctFrom52wLow') is not None:
+                range_info.append(f"From 52w low: {alert['pctFrom52wLow']:+.1f}%")
+
+            metrics_text = " • ".join(metrics) if metrics else ""
+            range_text = " • ".join(range_info) if range_info else ""
+
             description_parts.append(
                 f"**{alert['crypto']}** fell below target price\n"
                 f"├ Current: ${alert['currentPrice']:,.6f}\n"
                 f"├ Target: ${alert['targetPrice']:,.6f}\n"
-                f"└ Difference: ${alert['priceDiff']:,.6f} ({alert['priceDiffPercent']:+.2f}%)\n"
+                f"├ Difference: ${alert['priceDiff']:,.6f} ({alert['priceDiffPercent']:+.2f}%)\n"
+                + (f"├ {metrics_text}\n" if metrics_text else "")
+                + (f"└ {range_text}\n" if range_text else "└\n")
             )
 
     # Choose color based on alert types
