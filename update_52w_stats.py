@@ -27,10 +27,13 @@ def load_coins_config():
         with open(COINS_CONFIG_FILE, 'r') as f:
             return json.load(f)
     except FileNotFoundError:
-        logger.error(f"Coins config file {COINS_CONFIG_FILE} not found")
+        logger.error(f"❌ Configuration file '{COINS_CONFIG_FILE}' not found")
+        logger.error(f"💡 Please ensure {COINS_CONFIG_FILE} exists in the current directory")
         return None
     except json.JSONDecodeError as e:
-        logger.error(f"Error parsing coins config: {e}")
+        logger.error(f"❌ Invalid JSON syntax in '{COINS_CONFIG_FILE}'")
+        logger.error(f"💡 Error at line {e.lineno}, column {e.colno}: {e.msg}")
+        logger.error(f"💡 Check for missing commas, quotes, or brackets")
         return None
 
 
@@ -52,9 +55,13 @@ def save_52w_stats(stats_data, filename=STATS_FILE):
     try:
         with open(filename, 'w') as f:
             json.dump(stats_data, f, indent=2)
-        logger.info(f"Saved stats to {filename}")
-    except Exception as e:
-        logger.error(f"Error saving stats: {e}")
+        logger.info(f"✅ Saved stats to {filename}")
+    except PermissionError:
+        logger.error(f"❌ Permission denied writing to '{filename}'")
+        logger.error(f"💡 Check file permissions or run with appropriate access")
+    except IOError as e:
+        logger.error(f"❌ Failed to save stats to '{filename}': {e}")
+        logger.error(f"💡 Check disk space and file system permissions")
 
 
 def fetch_52w_high_low(crypto_id, max_retries=3):
@@ -70,12 +77,12 @@ def fetch_52w_high_low(crypto_id, max_retries=3):
 
     for attempt in range(max_retries):
         try:
-            response = requests.get(url, params=params)
+            response = requests.get(url, params=params, timeout=30)
             response.raise_for_status()
             data = response.json()
 
             if "prices" not in data or len(data["prices"]) == 0:
-                logger.warning(f"No price data returned for {crypto_id}")
+                logger.warning(f"⚠️  No price data returned for {crypto_id}")
                 return None
 
             # Extract prices from [timestamp, price] pairs
@@ -89,23 +96,41 @@ def fetch_52w_high_low(crypto_id, max_retries=3):
             logger.info(f"{crypto_id}: 52w high=${result['high_52w']:,.2f}, low=${result['low_52w']:,.2f}")
             return result
 
-        except requests.exceptions.HTTPError as e:
-            if e.response.status_code == 429:  # Rate limit
-                retry_wait = (attempt + 1) * 10  # 10s, 20s, 30s
-                logger.warning(f"Rate limit hit for {crypto_id}, waiting {retry_wait}s before retry {attempt + 1}/{max_retries}")
+        except requests.exceptions.Timeout:
+            if attempt < max_retries - 1:
+                retry_wait = (attempt + 1) * 10
+                logger.warning(f"⚠️  Timeout fetching {crypto_id}, retrying in {retry_wait}s ({attempt + 1}/{max_retries})")
                 time.sleep(retry_wait)
                 continue
             else:
-                logger.error(f"HTTP error fetching 52w data for {crypto_id}: {str(e)}")
+                logger.error(f"❌ Timeout fetching 52w data for {crypto_id} after {max_retries} attempts")
                 return None
+        except requests.exceptions.HTTPError as e:
+            if e.response.status_code == 429:  # Rate limit
+                retry_wait = (attempt + 1) * 10  # 10s, 20s, 30s
+                logger.warning(f"⚠️  Rate limit hit for {crypto_id}, waiting {retry_wait}s before retry ({attempt + 1}/{max_retries})")
+                time.sleep(retry_wait)
+                continue
+            elif e.response.status_code >= 500:
+                logger.error(f"❌ CoinGecko API server error ({e.response.status_code}) for {crypto_id}")
+                logger.error(f"💡 CoinGecko service may be down, try again later")
+                return None
+            else:
+                logger.error(f"❌ HTTP {e.response.status_code} error fetching 52w data for {crypto_id}")
+                return None
+        except requests.exceptions.ConnectionError:
+            logger.error(f"❌ Network connection error fetching {crypto_id}")
+            logger.error(f"💡 Check your internet connection")
+            return None
         except requests.exceptions.RequestException as e:
-            logger.error(f"Error fetching 52w data for {crypto_id}: {str(e)}")
+            logger.error(f"❌ Error fetching 52w data for {crypto_id}: {str(e)}")
             return None
         except (KeyError, ValueError, TypeError) as e:
-            logger.error(f"Error parsing 52w data for {crypto_id}: {str(e)}")
+            logger.error(f"❌ Error parsing 52w data for {crypto_id}: {str(e)}")
+            logger.error(f"💡 API response format may have changed")
             return None
 
-    logger.error(f"Failed to fetch {crypto_id} after {max_retries} retries")
+    logger.error(f"❌ Failed to fetch {crypto_id} after {max_retries} retries")
     return None
 
 
@@ -141,12 +166,12 @@ def update_all_52w_stats():
     """
     Main function to update 52w stats for all coins
     """
-    logger.info("Starting 52w stats update")
+    logger.info("🔄 Starting 52w stats update")
 
     # Load coins config
     coins_config = load_coins_config()
     if not coins_config:
-        logger.error("Could not load coins config, aborting")
+        logger.error("❌ Could not load coins config, aborting update")
         return
 
     # Prepare new stats data
@@ -206,17 +231,28 @@ def update_all_52w_stats():
     # Save results
     if stats_data["coins"]:
         save_52w_stats(stats_data)
-        logger.info(f"Successfully updated stats for {len(stats_data['coins'])} coins")
+        logger.info(f"✅ Successfully updated stats for {len(stats_data['coins'])} coins")
     else:
-        logger.error("No stats were successfully fetched, not saving")
+        logger.error("❌ No stats were successfully fetched, not saving")
+        logger.error("💡 Check your internet connection and CoinGecko API status")
 
 
 def main():
     """Entry point for the script"""
     try:
         update_all_52w_stats()
+    except KeyboardInterrupt:
+        logger.info("\n⚠️  Update interrupted by user")
+    except KeyError as e:
+        logger.error(f"❌ Configuration error: Missing required field {e}")
+        logger.error(f"💡 Check your coins_config.json structure")
+        import sys
+        sys.exit(1)
     except Exception as e:
-        logger.error(f"Unexpected error: {str(e)}")
+        logger.error(f"❌ Unexpected error during 52w stats update")
+        logger.error(f"💡 Error details: {str(e)}")
+        import sys
+        sys.exit(1)
 
 
 if __name__ == "__main__":

@@ -7,15 +7,16 @@
 - [x] Config validator (`--validate` flag)
 - [x] Project renamed to CoinWatch
 - [x] Updated README with new features
+- [x] **Better error messages**
+  - User-friendly error messages with ❌/⚠️/💡 indicators
+  - Context-rich API error messages (rate limits, timeouts, connection errors)
+  - Helpful suggestions for fixing configuration issues
+  - Specific Discord webhook error handling
+  - Graceful handling of missing files with actionable advice
 
 ## 🔄 In Progress
 
 ### Phase 1 - Quick Wins (Remaining)
-- [ ] **Better error messages**
-  - Replace stack traces with user-friendly messages
-  - Add context to API errors
-  - Improve config loading error messages
-
 - [ ] **CLI for coin management**
   - `./coinwatch add <coin-id> --ath 50,60,70 --price 80000,70000`
   - `./coinwatch list`
