@@ -1,4 +1,4 @@
-# 🚨 Crypto Alert Bot
+# 🔍 CoinWatch
 
 Cryptocurrency price monitoring system that sends intelligent alerts to Discord.
 
@@ -23,8 +23,8 @@ Cryptocurrency price monitoring system that sends intelligent alerts to Discord.
 
 ```bash
 # Clone and setup
-git clone https://github.com/yourusername/crypto-alert.git
-cd crypto-alert
+git clone https://github.com/sharpz33/coinwatch.git
+cd coinwatch
 python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
