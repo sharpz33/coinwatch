@@ -90,6 +90,81 @@ def load_52w_stats():
         logger.error(f"Error parsing 52w stats: {e}")
         return {"last_updated": None, "coins": {}}
 
+def validate_coins_config(config):
+    """
+    Validate coins configuration structure and content
+
+    Returns:
+        List of error messages (empty list if valid)
+    """
+    errors = []
+
+    # Check if 'coins' key exists
+    if 'coins' not in config:
+        errors.append("Missing required key: 'coins'")
+        return errors
+
+    # Check if coins is a list
+    if not isinstance(config['coins'], list):
+        errors.append("'coins' must be a list")
+        return errors
+
+    # Validate each coin
+    required_fields = ['id', 'name', 'symbol', 'ath_thresholds', 'price_alerts']
+
+    for idx, coin in enumerate(config['coins']):
+        coin_prefix = f"Coin {idx + 1}"
+
+        # Check required fields
+        for field in required_fields:
+            if field not in coin:
+                errors.append(f"{coin_prefix}: Missing required field '{field}'")
+
+        # Validate field types
+        if 'id' in coin:
+            if not isinstance(coin['id'], str):
+                errors.append(f"{coin_prefix}: 'id' must be a string")
+            elif coin['id'] != coin['id'].lower():
+                errors.append(f"{coin_prefix}: 'id' should be lowercase (CoinGecko format)")
+
+        if 'name' in coin and not isinstance(coin['name'], str):
+            errors.append(f"{coin_prefix}: 'name' must be a string")
+
+        if 'symbol' in coin and not isinstance(coin['symbol'], str):
+            errors.append(f"{coin_prefix}: 'symbol' must be a string")
+
+        if 'ath_thresholds' in coin and not isinstance(coin['ath_thresholds'], list):
+            errors.append(f"{coin_prefix}: 'ath_thresholds' must be a list")
+
+        if 'price_alerts' in coin and not isinstance(coin['price_alerts'], list):
+            errors.append(f"{coin_prefix}: 'price_alerts' must be a list")
+
+    return errors
+
+def validate_alert_config(config):
+    """
+    Validate alert configuration structure and types
+
+    Returns:
+        List of error messages (empty list if valid)
+    """
+    errors = []
+
+    # Expected types for each field
+    expected_types = {
+        'reset_alerts_daily': bool,
+        'check_interval_minutes': int,
+        'max_alerts_per_run': int,
+        'alert_tracking_file': str
+    }
+
+    for field, expected_type in expected_types.items():
+        if field in config:
+            if not isinstance(config[field], expected_type):
+                errors.append(f"'{field}' must be of type {expected_type.__name__}, got {type(config[field]).__name__}")
+
+    return errors
+
 def get_current_prices(coin_ids):
     """
     Fetch current prices for specified cryptocurrencies
@@ -412,8 +487,52 @@ def main():
     """
     import sys
 
-    # Check for --dry-run flag
+    # Check for command flags
     dry_run = '--dry-run' in sys.argv
+    validate_only = '--validate' in sys.argv
+
+    # Handle --validate flag
+    if validate_only:
+        logger.info("Validating configuration files...")
+
+        coins_config = load_coins_config()
+        alert_config = load_alert_config()
+
+        all_valid = True
+
+        # Validate coins config
+        if coins_config:
+            errors = validate_coins_config(coins_config)
+            if errors:
+                logger.error(f"❌ coins_config.json has {len(errors)} error(s):")
+                for error in errors:
+                    logger.error(f"  - {error}")
+                all_valid = False
+            else:
+                logger.info("✅ coins_config.json is valid")
+        else:
+            logger.error("❌ Could not load coins_config.json")
+            all_valid = False
+
+        # Validate alert config
+        if alert_config:
+            errors = validate_alert_config(alert_config)
+            if errors:
+                logger.error(f"❌ alert_config.json has {len(errors)} error(s):")
+                for error in errors:
+                    logger.error(f"  - {error}")
+                all_valid = False
+            else:
+                logger.info("✅ alert_config.json is valid")
+        else:
+            logger.error("❌ Could not load alert_config.json")
+            all_valid = False
+
+        if all_valid:
+            logger.info("🎉 All configuration files are valid!")
+            sys.exit(0)
+        else:
+            sys.exit(1)
 
     if dry_run:
         logger.info("Running in DRY RUN mode - no alerts will be sent or saved")

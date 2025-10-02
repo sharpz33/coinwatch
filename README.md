@@ -4,7 +4,7 @@ Cryptocurrency price monitoring system that sends intelligent alerts to Discord.
 
 ![Python](https://img.shields.io/badge/python-3.8+-blue.svg)
 ![License](https://img.shields.io/badge/license-MIT-green.svg)
-![Tests](https://img.shields.io/badge/tests-39%20passing-brightgreen.svg)
+![Tests](https://img.shields.io/badge/tests-30%20passing-brightgreen.svg)
 
 ## Screenshot
 
@@ -68,10 +68,24 @@ python crypto_alert.py
 2. **update_52w_stats.py** - Updates 52-week stats weekly (Sunday 3 AM)
 3. **setup_cron.sh** - Configures automated scheduling
 
+## Usage
+
+### Dry Run Mode
+Test alerts without sending to Discord or saving state:
+```bash
+python crypto_alert.py --dry-run
+```
+
+### Validate Configuration
+Check your config files for errors:
+```bash
+python crypto_alert.py --validate
+```
+
 ## Testing
 
 ```bash
-pytest                          # Run all tests
+pytest                          # Run all tests (30 passing)
 pytest test_crypto_alert.py -v # Test main script
 ```
 

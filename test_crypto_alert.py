@@ -380,6 +380,113 @@ class TestDryRunMode:
             assert alerts[0]["crypto"] == "Bitcoin (BTC)"
 
 
+class TestConfigValidator:
+    """Test configuration validation"""
+
+    def test_validate_valid_coins_config(self):
+        """Test validation of valid coins config"""
+        valid_config = {
+            "coins": [
+                {
+                    "id": "bitcoin",
+                    "name": "Bitcoin",
+                    "symbol": "BTC",
+                    "ath_thresholds": [30, 40, 50],
+                    "price_alerts": [80000, 70000]
+                }
+            ]
+        }
+        errors = crypto_alert.validate_coins_config(valid_config)
+        assert len(errors) == 0
+
+    def test_validate_missing_coins_key(self):
+        """Test validation fails when 'coins' key is missing"""
+        invalid_config = {"data": []}
+        errors = crypto_alert.validate_coins_config(invalid_config)
+        assert len(errors) > 0
+        assert any("coins" in err.lower() for err in errors)
+
+    def test_validate_coins_not_list(self):
+        """Test validation fails when coins is not a list"""
+        invalid_config = {"coins": "not a list"}
+        errors = crypto_alert.validate_coins_config(invalid_config)
+        assert len(errors) > 0
+        assert any("list" in err.lower() for err in errors)
+
+    def test_validate_coin_missing_required_fields(self):
+        """Test validation fails when coin is missing required fields"""
+        invalid_config = {
+            "coins": [
+                {
+                    "id": "bitcoin",
+                    # Missing name, symbol
+                    "ath_thresholds": [30],
+                    "price_alerts": []
+                }
+            ]
+        }
+        errors = crypto_alert.validate_coins_config(invalid_config)
+        assert len(errors) > 0
+        assert any("name" in err.lower() for err in errors)
+        assert any("symbol" in err.lower() for err in errors)
+
+    def test_validate_invalid_threshold_types(self):
+        """Test validation fails for invalid threshold types"""
+        invalid_config = {
+            "coins": [
+                {
+                    "id": "bitcoin",
+                    "name": "Bitcoin",
+                    "symbol": "BTC",
+                    "ath_thresholds": "not a list",
+                    "price_alerts": [80000]
+                }
+            ]
+        }
+        errors = crypto_alert.validate_coins_config(invalid_config)
+        assert len(errors) > 0
+        assert any("ath_thresholds" in err.lower() for err in errors)
+
+    def test_validate_valid_alert_config(self):
+        """Test validation of valid alert config"""
+        valid_config = {
+            "reset_alerts_daily": True,
+            "check_interval_minutes": 360,
+            "max_alerts_per_run": 20,
+            "alert_tracking_file": "sent_alerts.json"
+        }
+        errors = crypto_alert.validate_alert_config(valid_config)
+        assert len(errors) == 0
+
+    def test_validate_alert_config_invalid_types(self):
+        """Test validation fails for invalid types in alert config"""
+        invalid_config = {
+            "reset_alerts_daily": "yes",  # Should be bool
+            "check_interval_minutes": "360",  # Should be int
+            "max_alerts_per_run": 20.5,  # Should be int
+        }
+        errors = crypto_alert.validate_alert_config(invalid_config)
+        assert len(errors) > 0
+
+    def test_validate_coin_id_format(self):
+        """Test validation of CoinGecko ID format"""
+        invalid_config = {
+            "coins": [
+                {
+                    "id": "Bitcoin",  # Should be lowercase
+                    "name": "Bitcoin",
+                    "symbol": "BTC",
+                    "ath_thresholds": [],
+                    "price_alerts": []
+                }
+            ]
+        }
+        errors = crypto_alert.validate_coins_config(invalid_config)
+        # Should warn about uppercase in ID
+        assert len(errors) > 0
+        assert any("lowercase" in err.lower() or "id" in err.lower() for err in errors)
+
+
 class TestDiscordIntegration:
     """Test Discord webhook integration"""
 
