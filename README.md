@@ -6,6 +6,10 @@ Cryptocurrency price monitoring system that sends intelligent alerts to Discord.
 ![License](https://img.shields.io/badge/license-MIT-green.svg)
 ![Tests](https://img.shields.io/badge/tests-39%20passing-brightgreen.svg)
 
+## Screenshot
+
+![Discord Alert Example](screenshots/discord-alert-example.png)
+
 ## Features
 
 - **ATH Drop Alerts** - Get notified when crypto drops X% from all-time high
