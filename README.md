@@ -25,8 +25,10 @@ Cryptocurrency price monitoring system that sends intelligent alerts to Discord.
 # Clone and setup
 git clone https://github.com/sharpz33/coinwatch.git
 cd coinwatch
+
+# Create virtual environment and install dependencies
 python3 -m venv venv
-source venv/bin/activate
+source venv/bin/activate  # On Windows: venv\Scripts\activate
 pip install -r requirements.txt
 
 # Configure
@@ -85,6 +87,10 @@ python crypto_alert.py --validate
 ## Testing
 
 ```bash
+# Install dependencies first (if not done already)
+pip install -r requirements.txt
+
+# Run tests
 pytest                          # Run all tests (30 passing)
 pytest test_crypto_alert.py -v # Test main script
 ```
