@@ -289,6 +289,97 @@ class TestAlertLogic:
             assert len(price_alerts_70k) == 0
 
 
+class TestDryRunMode:
+    """Test dry run mode functionality"""
+
+    def test_dry_run_does_not_send_to_discord(self):
+        """Test that dry run mode doesn't send to Discord"""
+        alerts = [
+            {
+                "type": "ath",
+                "crypto": "Bitcoin (BTC)",
+                "currentPrice": 48300,
+                "athPrice": 69000,
+                "dropPercent": 30.0,
+                "threshold": 30
+            }
+        ]
+
+        with patch("requests.post") as mock_post:
+            crypto_alert.send_discord_alert(alerts, dry_run=True)
+            # Discord webhook should NOT be called in dry run
+            assert not mock_post.called
+
+    def test_dry_run_does_not_save_sent_alerts(self):
+        """Test that dry run doesn't save alert tracking"""
+        sample_coins_config = {
+            "coins": [
+                {
+                    "id": "bitcoin",
+                    "name": "Bitcoin",
+                    "symbol": "BTC",
+                    "ath_thresholds": [30],
+                    "price_alerts": []
+                }
+            ]
+        }
+
+        current_prices = [{"id": "bitcoin", "current_price": 48300}]
+        ath_data = {"market_data": {"ath": {"usd": 69000}}}
+        sent_alerts_data = {"date": str(date.today()), "sent_alerts": {}}
+        alert_config = {"reset_alerts_daily": True}
+
+        with patch("crypto_alert.load_coins_config", return_value=sample_coins_config), \
+             patch("crypto_alert.load_alert_config", return_value=alert_config), \
+             patch("crypto_alert.load_sent_alerts", return_value=sent_alerts_data), \
+             patch("crypto_alert.load_52w_stats", return_value={"coins": {}}), \
+             patch("crypto_alert.save_sent_alerts") as mock_save, \
+             patch("crypto_alert.get_current_prices", return_value=current_prices), \
+             patch("crypto_alert.get_ath_price", return_value=ath_data), \
+             patch("time.sleep"):
+
+            alerts = crypto_alert.check_alerts(dry_run=True)
+
+            # Should find alerts but NOT save them
+            assert len(alerts) > 0
+            assert not mock_save.called
+
+    def test_dry_run_returns_alerts(self):
+        """Test that dry run still returns alerts for inspection"""
+        sample_coins_config = {
+            "coins": [
+                {
+                    "id": "bitcoin",
+                    "name": "Bitcoin",
+                    "symbol": "BTC",
+                    "ath_thresholds": [30],
+                    "price_alerts": []
+                }
+            ]
+        }
+
+        current_prices = [{"id": "bitcoin", "current_price": 48300}]
+        ath_data = {"market_data": {"ath": {"usd": 69000}}}
+        sent_alerts_data = {"date": str(date.today()), "sent_alerts": {}}
+        alert_config = {"reset_alerts_daily": True}
+
+        with patch("crypto_alert.load_coins_config", return_value=sample_coins_config), \
+             patch("crypto_alert.load_alert_config", return_value=alert_config), \
+             patch("crypto_alert.load_sent_alerts", return_value=sent_alerts_data), \
+             patch("crypto_alert.load_52w_stats", return_value={"coins": {}}), \
+             patch("crypto_alert.save_sent_alerts"), \
+             patch("crypto_alert.get_current_prices", return_value=current_prices), \
+             patch("crypto_alert.get_ath_price", return_value=ath_data), \
+             patch("time.sleep"):
+
+            alerts = crypto_alert.check_alerts(dry_run=True)
+
+            # Should return alerts even in dry run
+            assert len(alerts) == 1
+            assert alerts[0]["type"] == "ath"
+            assert alerts[0]["crypto"] == "Bitcoin (BTC)"
+
+
 class TestDiscordIntegration:
     """Test Discord webhook integration"""
 

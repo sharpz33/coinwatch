@@ -147,9 +147,12 @@ def get_ath_price(crypto_id, max_retries=3):
     logger.error(f"Failed to fetch ATH for {crypto_id} after {max_retries} retries")
     return None
 
-def check_alerts():
+def check_alerts(dry_run=False):
     """
     Check for both ATH percentage drops and price alerts
+
+    Args:
+        dry_run: If True, alerts are found but not saved to tracking
     """
     # Load configurations
     coins_config = load_coins_config()
@@ -274,18 +277,28 @@ def check_alerts():
                     alerts.append(alert)
                     new_sent_alerts[alert_key] = True
 
-    # Save updated alert tracking
-    if new_sent_alerts != sent_alerts['sent_alerts']:
+    # Save updated alert tracking (skip in dry run)
+    if not dry_run and new_sent_alerts != sent_alerts['sent_alerts']:
         sent_alerts['sent_alerts'] = new_sent_alerts
         save_sent_alerts(sent_alerts, alert_config)
 
     return alerts
 
-def send_discord_alert(alerts):
+def send_discord_alert(alerts, dry_run=False):
     """
     Send alerts to Discord using webhook with sections for different alert types
+
+    Args:
+        alerts: List of alert dictionaries
+        dry_run: If True, alerts are logged but not sent to Discord
     """
     if not alerts:
+        return
+
+    if dry_run:
+        logger.info(f"[DRY RUN] Would send {len(alerts)} alerts to Discord")
+        for alert in alerts:
+            logger.info(f"[DRY RUN] Alert: {alert}")
         return
 
     # Separate alerts by type
@@ -397,24 +410,32 @@ def main():
     """
     Main function to run the alert check once
     """
-    logger.info("Running Crypto Alert check (ATH drops + Price alerts)")
+    import sys
 
-    # Validate Discord webhook URL
-    if not DISCORD_WEBHOOK_URL:
+    # Check for --dry-run flag
+    dry_run = '--dry-run' in sys.argv
+
+    if dry_run:
+        logger.info("Running in DRY RUN mode - no alerts will be sent or saved")
+    else:
+        logger.info("Running Crypto Alert check (ATH drops + Price alerts)")
+
+    # Validate Discord webhook URL (not needed in dry run)
+    if not dry_run and not DISCORD_WEBHOOK_URL:
         logger.error("Discord webhook URL not found. Please set the DISCORD_WEBHOOK_URL environment variable.")
         return
 
     try:
         # Check for alerts (both ATH and price)
-        alerts = check_alerts()
+        alerts = check_alerts(dry_run=dry_run)
 
         if alerts:
             ath_count = len([a for a in alerts if a['type'] == 'ath'])
             price_count = len([a for a in alerts if a['type'] == 'price'])
-            logger.info(f"Found {len(alerts)} alerts ({ath_count} ATH, {price_count} price). Sending to Discord...")
-            send_discord_alert(alerts)
+            logger.info(f"Found {len(alerts)} alerts ({ath_count} ATH, {price_count} price){' [DRY RUN]' if dry_run else '. Sending to Discord...'}")
+            send_discord_alert(alerts, dry_run=dry_run)
         else:
-            logger.info("No alerts triggered at this time.")
+            logger.info(f"No alerts triggered at this time{' [DRY RUN]' if dry_run else '.'}")
 
     except Exception as e:
         logger.error(f"Error in alert system: {str(e)}")
