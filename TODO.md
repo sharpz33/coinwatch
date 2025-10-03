@@ -13,15 +13,20 @@
   - Helpful suggestions for fixing configuration issues
   - Specific Discord webhook error handling
   - Graceful handling of missing files with actionable advice
+- [x] **CLI for coin management**
+  - `./coinwatch add <coin-id> --ath 50,60,70 --price 80000,70000`
+  - `./coinwatch remove <coin-id>`
+  - `./coinwatch list` - Shows all monitored coins
+  - `./coinwatch search <query>` - Search for coin IDs in CoinGecko
+  - `./coinwatch popular` - Show top 50 coins by market cap
+  - `./coinwatch test` - Alias for --dry-run
+  - `./coinwatch validate` - Alias for --validate
+  - `./coinwatch help` - Complete help system
 
 ## 🔄 In Progress
 
-### Phase 1 - Quick Wins (Remaining)
-- [ ] **CLI for coin management**
-  - `./coinwatch add <coin-id> --ath 50,60,70 --price 80000,70000`
-  - `./coinwatch list`
-  - `./coinwatch remove <coin-id>`
-  - `./coinwatch test` (alias for --dry-run)
+### Phase 1 - Complete! 🎉
+All Phase 1 quick wins have been completed.
 
 ## 📋 Planned
 

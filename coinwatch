@@ -1,0 +1,359 @@
+#!/usr/bin/env python3
+"""
+CoinWatch CLI - Command-line interface for managing cryptocurrency alerts
+"""
+
+import sys
+import json
+import argparse
+import requests
+from pathlib import Path
+
+# Configuration files
+COINS_CONFIG_FILE = "coins_config.json"
+ALERT_CONFIG_FILE = "alert_config.json"
+
+
+def load_coins_config():
+    """Load coins configuration from JSON file"""
+    try:
+        with open(COINS_CONFIG_FILE, 'r') as f:
+            return json.load(f)
+    except FileNotFoundError:
+        return {"coins": []}
+    except json.JSONDecodeError as e:
+        print(f"❌ Invalid JSON syntax in '{COINS_CONFIG_FILE}'")
+        print(f"💡 Error at line {e.lineno}, column {e.colno}: {e.msg}")
+        sys.exit(1)
+
+
+def save_coins_config(config):
+    """Save coins configuration to JSON file"""
+    try:
+        with open(COINS_CONFIG_FILE, 'w') as f:
+            json.dump(config, f, indent=2)
+    except Exception as e:
+        print(f"❌ Failed to save configuration: {e}")
+        sys.exit(1)
+
+
+def show_help():
+    """Display help message"""
+    help_text = """
+🔍 CoinWatch - Cryptocurrency Alert System
+
+USAGE:
+  ./coinwatch <command> [options]
+
+COMMANDS:
+  add <coin-id>     Add a coin to monitoring
+  remove <coin-id>  Remove a coin from monitoring
+  list              List all monitored coins
+  search <query>    Search for coin IDs in CoinGecko
+  popular           Show top 50 coins by market cap
+  test              Run alert check in dry-run mode (no alerts sent)
+  validate          Validate configuration files
+  help              Show this help message
+
+OPTIONS (for add command):
+  --ath <values>    ATH drop thresholds (comma-separated percentages)
+  --price <values>  Price alert levels (comma-separated USD values)
+
+EXAMPLES:
+  ./coinwatch search bitcoin
+  ./coinwatch popular
+  ./coinwatch add bitcoin --ath 30,40,50 --price 80000,70000
+  ./coinwatch list
+  ./coinwatch remove bitcoin
+  ./coinwatch test
+  ./coinwatch validate
+
+MORE INFO:
+  - Coin IDs must be in CoinGecko format (lowercase, e.g., 'bitcoin', 'ethereum')
+  - Use 'search' command to find the correct coin ID
+  - Use 'popular' to see a list of top cryptocurrencies
+"""
+    print(help_text)
+
+
+def list_coins(config):
+    """List all monitored coins"""
+    if not config.get('coins'):
+        print("📭 No coins are currently being monitored")
+        print("💡 Add coins with: ./coinwatch add <coin-id>")
+        return
+
+    print(f"\n📊 Monitoring {len(config['coins'])} coin(s):\n")
+    for idx, coin in enumerate(config['coins'], 1):
+        print(f"{idx}. {coin['name']} ({coin['symbol']})")
+        print(f"   ID: {coin['id']}")
+        if coin.get('ath_thresholds'):
+            print(f"   ATH Alerts: {', '.join(map(str, coin['ath_thresholds']))}%")
+        if coin.get('price_alerts'):
+            print(f"   Price Alerts: ${', $'.join(map(str, coin['price_alerts']))}")
+        print()
+
+
+def search_coins(query):
+    """Search for coins in CoinGecko"""
+    print(f"🔎 Searching for '{query}'...\n")
+
+    try:
+        response = requests.get(
+            "https://api.coingecko.com/api/v3/search",
+            params={"query": query},
+            timeout=10
+        )
+        response.raise_for_status()
+        data = response.json()
+
+        coins = data.get('coins', [])
+
+        if not coins:
+            print(f"❌ No coins found for '{query}'")
+            print("💡 Try a different search term or use './coinwatch popular' to see top coins")
+            return
+
+        print(f"Found {len(coins)} result(s):\n")
+        for idx, coin in enumerate(coins[:10], 1):  # Show top 10
+            market_cap_rank = coin.get('market_cap_rank', 'N/A')
+            print(f"{idx}. {coin['name']} ({coin['symbol'].upper()})")
+            print(f"   ID: {coin['id']}")
+            print(f"   Rank: #{market_cap_rank}")
+            print()
+
+        if len(coins) > 10:
+            print(f"... and {len(coins) - 10} more results")
+            print("💡 Refine your search for more specific results\n")
+
+    except requests.exceptions.RequestException as e:
+        print(f"❌ Failed to search CoinGecko API: {e}")
+        print("💡 Check your internet connection")
+
+
+def show_popular():
+    """Show top 50 coins by market cap"""
+    print("🏆 Top 50 Cryptocurrencies by Market Cap\n")
+
+    try:
+        response = requests.get(
+            "https://api.coingecko.com/api/v3/coins/markets",
+            params={
+                "vs_currency": "usd",
+                "order": "market_cap_desc",
+                "per_page": 50,
+                "page": 1,
+                "sparkline": False
+            },
+            timeout=10
+        )
+        response.raise_for_status()
+        coins = response.json()
+
+        for coin in coins:
+            rank = coin['market_cap_rank']
+            name = coin['name']
+            symbol = coin['symbol'].upper()
+            coin_id = coin['id']
+            price = coin['current_price']
+
+            print(f"{rank:2d}. {name:20s} ({symbol:6s}) ${price:>12,.2f}")
+            print(f"    ID: {coin_id}")
+
+        print(f"\n💡 Add a coin with: ./coinwatch add <coin-id>")
+
+    except requests.exceptions.RequestException as e:
+        print(f"❌ Failed to fetch popular coins: {e}")
+        print("💡 Check your internet connection")
+
+
+def add_coin(coin_id, ath_thresholds=None, price_alerts=None):
+    """Add a coin to monitoring"""
+    config = load_coins_config()
+
+    # Check if coin already exists
+    for coin in config.get('coins', []):
+        if coin['id'] == coin_id:
+            print(f"⚠️  {coin['name']} ({coin['symbol']}) is already being monitored")
+            print(f"💡 Remove it first with: ./coinwatch remove {coin_id}")
+            return
+
+    # Fetch coin info from CoinGecko to validate and get name/symbol
+    print(f"🔎 Validating coin ID '{coin_id}'...")
+
+    try:
+        response = requests.get(
+            f"https://api.coingecko.com/api/v3/coins/{coin_id}",
+            params={"localization": False, "tickers": False, "market_data": False,
+                    "community_data": False, "developer_data": False},
+            timeout=10
+        )
+        response.raise_for_status()
+        coin_data = response.json()
+
+        name = coin_data['name']
+        symbol = coin_data['symbol'].upper()
+
+        # Create coin entry
+        new_coin = {
+            "id": coin_id,
+            "name": name,
+            "symbol": symbol,
+            "ath_thresholds": ath_thresholds or [],
+            "price_alerts": price_alerts or []
+        }
+
+        # Add to config
+        if 'coins' not in config:
+            config['coins'] = []
+        config['coins'].append(new_coin)
+
+        save_coins_config(config)
+
+        print(f"✅ Added {name} ({symbol}) to monitoring")
+        if ath_thresholds:
+            print(f"   ATH Alerts: {', '.join(map(str, ath_thresholds))}%")
+        if price_alerts:
+            print(f"   Price Alerts: ${', $'.join(map(str, price_alerts))}")
+        print(f"\n💡 Run './coinwatch list' to see all monitored coins")
+
+    except requests.exceptions.HTTPError as e:
+        if e.response.status_code == 404:
+            print(f"❌ Coin ID '{coin_id}' not found in CoinGecko")
+            print(f"💡 Search for the correct ID with: ./coinwatch search {coin_id}")
+        else:
+            print(f"❌ Failed to validate coin: {e}")
+    except requests.exceptions.RequestException as e:
+        print(f"❌ Network error: {e}")
+
+
+def remove_coin(coin_id):
+    """Remove a coin from monitoring"""
+    config = load_coins_config()
+
+    # Find and remove the coin
+    original_count = len(config.get('coins', []))
+    config['coins'] = [c for c in config.get('coins', []) if c['id'] != coin_id]
+
+    if len(config['coins']) == original_count:
+        print(f"⚠️  Coin '{coin_id}' not found in monitoring list")
+        print(f"💡 See monitored coins with: ./coinwatch list")
+        return
+
+    save_coins_config(config)
+    print(f"✅ Removed '{coin_id}' from monitoring")
+
+
+def run_test():
+    """Run crypto_alert.py in dry-run mode"""
+    import subprocess
+
+    print("🧪 Running alert check in dry-run mode...\n")
+    result = subprocess.run([sys.executable, "crypto_alert.py", "--dry-run"])
+    sys.exit(result.returncode)
+
+
+def run_validate():
+    """Run crypto_alert.py validation"""
+    import subprocess
+
+    result = subprocess.run([sys.executable, "crypto_alert.py", "--validate"])
+    sys.exit(result.returncode)
+
+
+def main():
+    """Main CLI entry point"""
+    if len(sys.argv) < 2:
+        show_help()
+        sys.exit(0)
+
+    command = sys.argv[1]
+
+    # Handle help
+    if command in ['help', '--help', '-h']:
+        show_help()
+        sys.exit(0)
+
+    # Handle list
+    elif command == 'list':
+        config = load_coins_config()
+        list_coins(config)
+
+    # Handle search
+    elif command == 'search':
+        if len(sys.argv) < 3:
+            print("❌ Missing search query")
+            print("💡 Usage: ./coinwatch search <query>")
+            sys.exit(1)
+        query = ' '.join(sys.argv[2:])
+        search_coins(query)
+
+    # Handle popular
+    elif command == 'popular':
+        show_popular()
+
+    # Handle add
+    elif command == 'add':
+        if len(sys.argv) < 3:
+            print("❌ Missing coin ID")
+            print("💡 Usage: ./coinwatch add <coin-id> [--ath X,Y,Z] [--price A,B,C]")
+            print("💡 Find coin IDs with: ./coinwatch search <name>")
+            sys.exit(1)
+
+        coin_id = sys.argv[2]
+
+        # Parse optional arguments
+        ath_thresholds = None
+        price_alerts = None
+
+        i = 3
+        while i < len(sys.argv):
+            if sys.argv[i] == '--ath' and i + 1 < len(sys.argv):
+                try:
+                    ath_thresholds = [int(x.strip()) for x in sys.argv[i + 1].split(',')]
+                except ValueError:
+                    print("❌ Invalid ATH thresholds format")
+                    print("💡 Use comma-separated integers: --ath 30,40,50")
+                    sys.exit(1)
+                i += 2
+            elif sys.argv[i] == '--price' and i + 1 < len(sys.argv):
+                try:
+                    price_alerts = [float(x.strip()) for x in sys.argv[i + 1].split(',')]
+                except ValueError:
+                    print("❌ Invalid price alerts format")
+                    print("💡 Use comma-separated numbers: --price 80000,70000")
+                    sys.exit(1)
+                i += 2
+            else:
+                print(f"❌ Unknown option: {sys.argv[i]}")
+                sys.exit(1)
+
+        add_coin(coin_id, ath_thresholds, price_alerts)
+
+    # Handle remove
+    elif command == 'remove':
+        if len(sys.argv) < 3:
+            print("❌ Missing coin ID")
+            print("💡 Usage: ./coinwatch remove <coin-id>")
+            sys.exit(1)
+
+        coin_id = sys.argv[2]
+        remove_coin(coin_id)
+
+    # Handle test
+    elif command == 'test':
+        run_test()
+
+    # Handle validate
+    elif command == 'validate':
+        run_validate()
+
+    # Unknown command
+    else:
+        print(f"❌ Unknown command: {command}")
+        print("💡 Run './coinwatch help' to see available commands")
+        sys.exit(1)
+
+
+if __name__ == "__main__":
+    main()
