@@ -16,7 +16,7 @@ if [ ! -d "$PROJECT_DIR/venv" ]; then
     echo "  cd $PROJECT_DIR"
     echo "  python3 -m venv venv"
     echo "  source venv/bin/activate"
-    echo "  pip install requests python-dotenv"
+    echo "  pip install -r requirements.txt"
     exit 1
 fi
 
