@@ -3,8 +3,8 @@
 # Crypto Alert Wrapper Script for Cron
 # This script activates the virtual environment and runs the Python script
 
-# Set the project directory - update this to your actual path
-PROJECT_DIR="$HOME/app/crypto_alert"
+# Automatically detect the project directory (where this script is located)
+PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # Change to the project directory
 cd "$PROJECT_DIR" || {
