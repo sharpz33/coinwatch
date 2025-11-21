@@ -369,7 +369,7 @@ def check_alerts(dry_run=False):
                     alert.update(market_data)
                     potential_alerts.append(alert)
                     triggered_ath_keys = [f"{crypto_id}_ath_{t}" for t in triggered_thresholds]
-            time.sleep(0.5)
+            time.sleep(1.5)
 
         # Check price alerts
         if coin_config['price_alerts']:
