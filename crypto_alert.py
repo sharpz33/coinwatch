@@ -268,7 +268,8 @@ def get_ath_price(crypto_id, max_retries=3):
 
 def check_alerts(dry_run=False):
     """
-    Check for both ATH percentage drops and price alerts
+    Check for alerts, sending only the single most important alert per coin.
+    (Lowest price target or highest ATH drop).
 
     Args:
         dry_run: If True, alerts are found but not saved to tracking
@@ -308,41 +309,37 @@ def check_alerts(dry_run=False):
 
         crypto_name = coin_config['name']
         crypto_symbol = coin_config['symbol']
+        
+        logger.info(f"{crypto_name} ({crypto_symbol}) - Current: ${current_price:.6f}")
 
-        # Get additional market data from API response
+        # --- Logic to find the single best alert for the coin ---
+        potential_alerts = []
+        triggered_ath_keys = []
+        triggered_price_keys = []
+
+        # Get market data once
         price_change_24h = crypto.get('price_change_percentage_24h')
         price_change_7d = crypto.get('price_change_percentage_7d_in_currency')
         market_cap_rank = crypto.get('market_cap_rank')
         total_volume = crypto.get('total_volume')
         market_cap = crypto.get('market_cap')
-
-        # Get 52w stats if available
         coin_52w_stats = stats_52w.get('coins', {}).get(crypto_id)
         high_52w = coin_52w_stats.get('high_52w') if coin_52w_stats else None
         low_52w = coin_52w_stats.get('low_52w') if coin_52w_stats else None
+        pct_from_52w_high = ((current_price - high_52w) / high_52w) * 100 if high_52w and high_52w > 0 else None
+        pct_from_52w_low = ((current_price - low_52w) / low_52w) * 100 if low_52w and low_52w > 0 else None
 
-        # Calculate % from 52w high/low
-        pct_from_52w_high = None
-        pct_from_52w_low = None
-        if high_52w and high_52w > 0:
-            pct_from_52w_high = ((current_price - high_52w) / high_52w) * 100
-        if low_52w and low_52w > 0:
-            pct_from_52w_low = ((current_price - low_52w) / low_52w) * 100
-
-        # Build common market data dict
         market_data = {
-            "priceChange24h": round(price_change_24h, 2) if price_change_24h else None,
-            "priceChange7d": round(price_change_7d, 2) if price_change_7d else None,
+            "priceChange24h": round(price_change_24h, 2) if price_change_24h is not None else None,
+            "priceChange7d": round(price_change_7d, 2) if price_change_7d is not None else None,
             "marketCapRank": market_cap_rank,
             "totalVolume": total_volume,
             "marketCap": market_cap,
             "high52w": high_52w,
             "low52w": low_52w,
-            "pctFrom52wHigh": round(pct_from_52w_high, 2) if pct_from_52w_high else None,
-            "pctFrom52wLow": round(pct_from_52w_low, 2) if pct_from_52w_low else None
+            "pctFrom52wHigh": round(pct_from_52w_high, 2) if pct_from_52w_high is not None else None,
+            "pctFrom52wLow": round(pct_from_52w_low, 2) if pct_from_52w_low is not None else None
         }
-
-        logger.info(f"{crypto_name} ({crypto_symbol}) - Current: ${current_price:.6f}")
 
         # Check ATH alerts
         if coin_config['ath_thresholds']:
@@ -350,51 +347,68 @@ def check_alerts(dry_run=False):
             if ath_data:
                 ath_price = ath_data['market_data']['ath']['usd']
                 drop_percent = ((ath_price - current_price) / ath_price) * 100
-
                 logger.info(f"  ATH: ${ath_price:.6f}, Drop: {drop_percent:.2f}%")
 
-                for threshold in coin_config['ath_thresholds']:
-                    alert_key = f"{crypto_id}_ath_{threshold}"
-                    if (drop_percent >= threshold and
-                        drop_percent < (threshold + 10) and
-                        alert_key not in sent_alerts['sent_alerts']):
+                triggered_thresholds = [
+                    t for t in coin_config['ath_thresholds']
+                    if drop_percent >= t and f"{crypto_id}_ath_{t}" not in sent_alerts['sent_alerts']
+                ]
 
-                        alert = {
-                            "type": "ath",
-                            "crypto": f"{crypto_name} ({crypto_symbol})",
-                            "currentPrice": current_price,
-                            "athPrice": ath_price,
-                            "dropPercent": round(drop_percent, 2),
-                            "threshold": threshold
-                        }
-                        alert.update(market_data)
-                        alerts.append(alert)
-                        new_sent_alerts[alert_key] = True
-
-            # Rate limiting - wait between API calls
+                if triggered_thresholds:
+                    best_threshold = max(triggered_thresholds)
+                    effective_price = ath_price * (1 - best_threshold / 100)
+                    alert = {
+                        "type": "ath",
+                        "crypto": f"{crypto_name} ({crypto_symbol})",
+                        "currentPrice": current_price,
+                        "athPrice": ath_price,
+                        "dropPercent": round(drop_percent, 2),
+                        "threshold": best_threshold,
+                        "score": effective_price  # Score for comparison
+                    }
+                    alert.update(market_data)
+                    potential_alerts.append(alert)
+                    triggered_ath_keys = [f"{crypto_id}_ath_{t}" for t in triggered_thresholds]
             time.sleep(0.5)
 
         # Check price alerts
         if coin_config['price_alerts']:
-            for target_price in coin_config['price_alerts']:
-                alert_key = f"{crypto_id}_price_{target_price}"
-                if (current_price <= target_price and
-                    alert_key not in sent_alerts['sent_alerts']):
+            triggered_targets = [
+                p for p in coin_config['price_alerts']
+                if current_price <= p and f"{crypto_id}_price_{p}" not in sent_alerts['sent_alerts']
+            ]
 
-                    price_diff = current_price - target_price
-                    price_diff_percent = (price_diff / target_price) * 100 if target_price > 0 else 0
+            if triggered_targets:
+                best_target = min(triggered_targets)
+                price_diff = current_price - best_target
+                price_diff_percent = (price_diff / best_target) * 100 if best_target > 0 else 0
+                alert = {
+                    "type": "price",
+                    "crypto": f"{crypto_name} ({crypto_symbol})",
+                    "currentPrice": current_price,
+                    "targetPrice": best_target,
+                    "priceDiff": price_diff,
+                    "priceDiffPercent": round(price_diff_percent, 2),
+                    "score": best_target  # Score for comparison
+                }
+                alert.update(market_data)
+                potential_alerts.append(alert)
+                triggered_price_keys = [f"{crypto_id}_price_{p}" for p in triggered_targets]
+        
+        # Select the best alert from potentials
+        if potential_alerts:
+            # Sort by score (lowest price target is best)
+            potential_alerts.sort(key=lambda x: x['score'])
+            best_alert = potential_alerts[0]
+            del best_alert['score']  # Clean up score before sending
 
-                    alert = {
-                        "type": "price",
-                        "crypto": f"{crypto_name} ({crypto_symbol})",
-                        "currentPrice": current_price,
-                        "targetPrice": target_price,
-                        "priceDiff": price_diff,
-                        "priceDiffPercent": round(price_diff_percent, 2)
-                    }
-                    alert.update(market_data)
-                    alerts.append(alert)
-                    new_sent_alerts[alert_key] = True
+            alerts.append(best_alert)
+
+            # Mark all triggered alerts for this coin as sent
+            for key in triggered_ath_keys:
+                new_sent_alerts[key] = True
+            for key in triggered_price_keys:
+                new_sent_alerts[key] = True
 
     # Save updated alert tracking (skip in dry run)
     if not dry_run and new_sent_alerts != sent_alerts['sent_alerts']:
