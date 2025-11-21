@@ -239,7 +239,7 @@ def get_ath_price(crypto_id, max_retries=3):
             return response.json()
         except requests.exceptions.Timeout:
             if attempt < max_retries - 1:
-                retry_wait = (attempt + 1) * 5
+                retry_wait = (attempt + 1) * 30
                 logger.warning(f"⚠️  Timeout fetching ATH for {crypto_id}, retrying in {retry_wait}s ({attempt + 1}/{max_retries})")
                 time.sleep(retry_wait)
                 continue
@@ -248,7 +248,7 @@ def get_ath_price(crypto_id, max_retries=3):
                 return None
         except requests.exceptions.HTTPError as e:
             if e.response.status_code == 429:  # Rate limit
-                retry_wait = (attempt + 1) * 5  # 5s, 10s, 15s
+                retry_wait = (attempt + 1) * 30  # 30s, 60s, 90s
                 logger.warning(f"⚠️  Rate limit hit for {crypto_id}, waiting {retry_wait}s before retry ({attempt + 1}/{max_retries})")
                 time.sleep(retry_wait)
                 continue
@@ -369,7 +369,7 @@ def check_alerts(dry_run=False):
                     alert.update(market_data)
                     potential_alerts.append(alert)
                     triggered_ath_keys = [f"{crypto_id}_ath_{t}" for t in triggered_thresholds]
-            time.sleep(1.5)
+            time.sleep(3.0)
 
         # Check price alerts
         if coin_config['price_alerts']:
